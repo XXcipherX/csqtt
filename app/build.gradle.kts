@@ -8,6 +8,21 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val defaultVersionCode = 221
+val defaultVersionName = "2.1.9"
+val releaseVersionCodeProperty = providers.gradleProperty("releaseVersionCode").orNull
+val releaseVersionCodeOverride = releaseVersionCodeProperty?.toIntOrNull()
+require(releaseVersionCodeProperty == null || releaseVersionCodeOverride != null) {
+    "releaseVersionCode must be an integer"
+}
+require(releaseVersionCodeOverride == null || releaseVersionCodeOverride in 1..2_100_000_000) {
+    "releaseVersionCode is outside Android's supported range"
+}
+val releaseVersionNameOverride = providers.gradleProperty("releaseVersionName").orNull?.trim()
+require(releaseVersionNameOverride == null || releaseVersionNameOverride.isNotEmpty()) {
+    "releaseVersionName must not be blank"
+}
+
 val localProperties = Properties()
 val localPropertiesFile = rootProject.file("local.properties")
 if (localPropertiesFile.isFile) {
@@ -69,8 +84,8 @@ android {
         applicationId = "csqtt.quic.amurcanov"
         minSdk = 26
         targetSdk = 37
-        versionCode = 221
-        versionName = "2.1.9"
+        versionCode = releaseVersionCodeOverride ?: defaultVersionCode
+        versionName = releaseVersionNameOverride ?: defaultVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

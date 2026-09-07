@@ -1,0 +1,54 @@
+name: Docker CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "rust-server/**"
+      - "shared/**"
+      - ".github/workflows/docker-ci.yml"
+      - ".github/workflows/docker-image.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "rust-server/**"
+      - "shared/**"
+      - ".github/workflows/docker-ci.yml"
+      - ".github/workflows/docker-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: AMD64 image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image without publishing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64
+          outputs: type=oci,dest=/tmp/csqtt-image.tar
+          pull: true
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

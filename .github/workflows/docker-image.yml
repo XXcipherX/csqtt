@@ -1,4 +1,4 @@
-name: Build and push server image
+name: Build and push Docker image
 
 on:
   workflow_dispatch:
@@ -17,6 +17,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: docker-image-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   IMAGE_NAME: ghcr.io/xxcipherx/csqtt-server
 
@@ -24,6 +28,7 @@ jobs:
   build-and-push:
     name: Build and push server image
     runs-on: ubuntu-latest
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository

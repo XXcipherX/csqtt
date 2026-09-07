@@ -45,12 +45,14 @@ HOST="$(rustc +1.97.1 -vV | sed -n 's/^host: //p')"
 if [[ "$HOST" == *windows* ]]; then
 cat > "$WRAP/zigcc.ps1" <<'PS1'
 $filtered = @($args | Where-Object { $_ -notlike "--target=*" })
-& zig cc -target $env:CSQTT_ZIG_TARGET @filtered
+$cpuArgs = if ($env:CSQTT_ZIG_CPU) { @("-mcpu=$($env:CSQTT_ZIG_CPU)") } else { @() }
+& zig cc -target $env:CSQTT_ZIG_TARGET @cpuArgs @filtered
 exit $LASTEXITCODE
 PS1
 cat > "$WRAP/zigcxx.ps1" <<'PS1'
 $filtered = @($args | Where-Object { $_ -notlike "--target=*" })
-& zig c++ -target $env:CSQTT_ZIG_TARGET @filtered
+$cpuArgs = if ($env:CSQTT_ZIG_CPU) { @("-mcpu=$($env:CSQTT_ZIG_CPU)") } else { @() }
+& zig c++ -target $env:CSQTT_ZIG_TARGET @cpuArgs @filtered
 exit $LASTEXITCODE
 PS1
 cat > "$WRAP/zigcc.cmd" <<'CMD'
@@ -75,7 +77,11 @@ args=()
 for arg in "$@"; do
   [[ "$arg" == --target=* ]] || args+=("$arg")
 done
-exec zig cc -target "$CSQTT_ZIG_TARGET" "${args[@]}"
+cpu_args=()
+if [[ -n "${CSQTT_ZIG_CPU:-}" ]]; then
+  cpu_args+=("-mcpu=$CSQTT_ZIG_CPU")
+fi
+exec zig cc -target "$CSQTT_ZIG_TARGET" "${cpu_args[@]}" "${args[@]}"
 SH
 cat > "$WRAP/zigcxx" <<'SH'
 #!/usr/bin/env bash
@@ -83,7 +89,11 @@ args=()
 for arg in "$@"; do
   [[ "$arg" == --target=* ]] || args+=("$arg")
 done
-exec zig c++ -target "$CSQTT_ZIG_TARGET" "${args[@]}"
+cpu_args=()
+if [[ -n "${CSQTT_ZIG_CPU:-}" ]]; then
+  cpu_args+=("-mcpu=$CSQTT_ZIG_CPU")
+fi
+exec zig c++ -target "$CSQTT_ZIG_TARGET" "${cpu_args[@]}" "${args[@]}"
 SH
 cat > "$WRAP/zigar" <<'SH'
 #!/usr/bin/env bash
@@ -120,8 +130,9 @@ if [[ "$RUN_CHECKS" == 1 ]]; then
   fi
 fi
 build_variant() {
-  local target="$1" zig_target="$2" asset="$3"
+  local target="$1" zig_target="$2" asset="$3" zig_cpu="${4:-}"
   CSQTT_ZIG_TARGET="$zig_target" \
+    CSQTT_ZIG_CPU="$zig_cpu" \
     ZIG_GLOBAL_CACHE_DIR="$ROOT/build/zig-cache/$asset/global" \
     ZIG_LOCAL_CACHE_DIR="$ROOT/build/zig-cache/$asset/local" \
     CARGO_TARGET_DIR="$ROOT/build/linux-musl" \
@@ -133,7 +144,8 @@ build_variant() {
 }
 build_variant x86_64-unknown-linux-musl x86_64-linux-musl csqtt-linux-amd64
 build_variant aarch64-unknown-linux-musl aarch64-linux-musl csqtt-linux-arm64
-build_variant armv7-unknown-linux-musleabihf armv7-linux-musleabihf csqtt-linux-armv7
+build_variant armv7-unknown-linux-musleabihf arm-linux-musleabihf csqtt-linux-armv7 \
+  generic+v7a+vfp3-d32+thumb2-neon
 rm -f "$ROOT/../app/src/main/assets/csqtt"
 if command -v pwsh >/dev/null; then
   pwsh -NoProfile -File "$ROOT/../scripts/server_asset_provenance.ps1" -Mode Write
