@@ -2107,7 +2107,7 @@ async fn async_main() -> Result<()> {
         }
         if let Ok(cert) = rcgen::generate_simple_self_signed(subject_alt_names) {
             let cert_pem = cert.cert.pem();
-            let key_pem = cert.key_pair.serialize_pem();
+            let key_pem = cert.signing_key.serialize_pem();
             let _ = tokio::fs::write(&cert_path, cert_pem).await;
             let _ = tokio::fs::write(&key_path, key_pem).await;
             #[cfg(unix)]
