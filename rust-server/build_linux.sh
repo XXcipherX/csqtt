@@ -7,15 +7,33 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 RUN_CHECKS=""
 DIAGNOSTICS=0
+BUILD_TARGET=all
 while (($#)); do
   case "$1" in
     --tests) RUN_CHECKS=1 ;;
     --no-tests) RUN_CHECKS=0 ;;
     --diagnostics) DIAGNOSTICS=1 ;;
-    *) echo "Usage: $0 [--tests|--no-tests] [--diagnostics]" >&2; exit 2 ;;
+    --target)
+      if (($# < 2)); then
+        echo "Missing value for --target" >&2
+        exit 2
+      fi
+      BUILD_TARGET="$2"
+      shift
+      ;;
+    --target=*) BUILD_TARGET="${1#*=}" ;;
+    *) echo "Usage: $0 [--tests|--no-tests] [--diagnostics] [--target all|amd64|arm64|armv7]" >&2; exit 2 ;;
   esac
   shift
 done
+case "$BUILD_TARGET" in
+  all|amd64|arm64|armv7) ;;
+  *)
+    echo "Unsupported Linux build target: $BUILD_TARGET" >&2
+    echo "Expected one of: all, amd64, arm64, armv7" >&2
+    exit 2
+    ;;
+esac
 if [[ -z "$RUN_CHECKS" ]]; then
   if [[ -t 0 ]]; then
     read -rp "Запустить проверки и тесты (или их кросс-компиляцию) перед сборкой? [Y/n]: " REPLY
@@ -35,8 +53,21 @@ command -v cargo >/dev/null
 command -v rustup >/dev/null
 command -v zig >/dev/null
 cargo zigbuild --help >/dev/null
-rustup toolchain install 1.97.1 --profile minimal --component rustfmt --component clippy
-rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabihf --toolchain 1.97.1
+TOOLCHAIN_ARGS=(--profile minimal)
+if [[ "$RUN_CHECKS" == 1 ]]; then
+  TOOLCHAIN_ARGS+=(--component rustfmt --component clippy)
+fi
+rustup toolchain install 1.97.1 "${TOOLCHAIN_ARGS[@]}"
+case "$BUILD_TARGET" in
+  all) RUST_TARGETS=(x86_64-unknown-linux-musl aarch64-unknown-linux-musl armv7-unknown-linux-musleabihf) ;;
+  amd64) RUST_TARGETS=(x86_64-unknown-linux-musl) ;;
+  arm64) RUST_TARGETS=(aarch64-unknown-linux-musl) ;;
+  armv7) RUST_TARGETS=(armv7-unknown-linux-musleabihf) ;;
+esac
+if [[ "$RUN_CHECKS" == 1 && "$BUILD_TARGET" != all && "$BUILD_TARGET" != amd64 ]]; then
+  RUST_TARGETS+=(x86_64-unknown-linux-musl)
+fi
+rustup target add "${RUST_TARGETS[@]}" --toolchain 1.97.1
 rustc +1.97.1 --version
 zig version
 WRAP="$ROOT/build/zig-wrappers"
@@ -45,12 +76,14 @@ HOST="$(rustc +1.97.1 -vV | sed -n 's/^host: //p')"
 if [[ "$HOST" == *windows* ]]; then
 cat > "$WRAP/zigcc.ps1" <<'PS1'
 $filtered = @($args | Where-Object { $_ -notlike "--target=*" })
-& zig cc -target $env:CSQTT_ZIG_TARGET @filtered
+$cpuArgs = if ($env:CSQTT_ZIG_CPU) { @("-mcpu=$($env:CSQTT_ZIG_CPU)") } else { @() }
+& zig cc -target $env:CSQTT_ZIG_TARGET @cpuArgs @filtered
 exit $LASTEXITCODE
 PS1
 cat > "$WRAP/zigcxx.ps1" <<'PS1'
 $filtered = @($args | Where-Object { $_ -notlike "--target=*" })
-& zig c++ -target $env:CSQTT_ZIG_TARGET @filtered
+$cpuArgs = if ($env:CSQTT_ZIG_CPU) { @("-mcpu=$($env:CSQTT_ZIG_CPU)") } else { @() }
+& zig c++ -target $env:CSQTT_ZIG_TARGET @cpuArgs @filtered
 exit $LASTEXITCODE
 PS1
 cat > "$WRAP/zigcc.cmd" <<'CMD'
@@ -75,7 +108,11 @@ args=()
 for arg in "$@"; do
   [[ "$arg" == --target=* ]] || args+=("$arg")
 done
-exec zig cc -target "$CSQTT_ZIG_TARGET" "${args[@]}"
+cpu_args=()
+if [[ -n "${CSQTT_ZIG_CPU:-}" ]]; then
+  cpu_args+=("-mcpu=$CSQTT_ZIG_CPU")
+fi
+exec zig cc -target "$CSQTT_ZIG_TARGET" "${cpu_args[@]}" "${args[@]}"
 SH
 cat > "$WRAP/zigcxx" <<'SH'
 #!/usr/bin/env bash
@@ -83,7 +120,11 @@ args=()
 for arg in "$@"; do
   [[ "$arg" == --target=* ]] || args+=("$arg")
 done
-exec zig c++ -target "$CSQTT_ZIG_TARGET" "${args[@]}"
+cpu_args=()
+if [[ -n "${CSQTT_ZIG_CPU:-}" ]]; then
+  cpu_args+=("-mcpu=$CSQTT_ZIG_CPU")
+fi
+exec zig c++ -target "$CSQTT_ZIG_TARGET" "${cpu_args[@]}" "${args[@]}"
 SH
 cat > "$WRAP/zigar" <<'SH'
 #!/usr/bin/env bash
@@ -120,8 +161,9 @@ if [[ "$RUN_CHECKS" == 1 ]]; then
   fi
 fi
 build_variant() {
-  local target="$1" zig_target="$2" asset="$3"
+  local target="$1" zig_target="$2" asset="$3" zig_cpu="${4:-}"
   CSQTT_ZIG_TARGET="$zig_target" \
+    CSQTT_ZIG_CPU="$zig_cpu" \
     ZIG_GLOBAL_CACHE_DIR="$ROOT/build/zig-cache/$asset/global" \
     ZIG_LOCAL_CACHE_DIR="$ROOT/build/zig-cache/$asset/local" \
     CARGO_TARGET_DIR="$ROOT/build/linux-musl" \
@@ -131,11 +173,28 @@ build_variant() {
   cp "$ROOT/build/linux-musl/$target/release/csqtt" "$ROOT/../app/src/main/assets/$asset"
   ls -lh "$ROOT/dist/$asset"
 }
-build_variant x86_64-unknown-linux-musl x86_64-linux-musl csqtt-linux-amd64
-build_variant aarch64-unknown-linux-musl aarch64-linux-musl csqtt-linux-arm64
-build_variant armv7-unknown-linux-musleabihf armv7-linux-musleabihf csqtt-linux-armv7
+case "$BUILD_TARGET" in
+  all)
+    build_variant x86_64-unknown-linux-musl x86_64-linux-musl csqtt-linux-amd64
+    build_variant aarch64-unknown-linux-musl aarch64-linux-musl csqtt-linux-arm64
+    build_variant armv7-unknown-linux-musleabihf arm-linux-musleabihf csqtt-linux-armv7 \
+      generic+v7a+vfp3-d32+thumb2-neon
+    ;;
+  amd64)
+    build_variant x86_64-unknown-linux-musl x86_64-linux-musl csqtt-linux-amd64
+    ;;
+  arm64)
+    build_variant aarch64-unknown-linux-musl aarch64-linux-musl csqtt-linux-arm64
+    ;;
+  armv7)
+    build_variant armv7-unknown-linux-musleabihf arm-linux-musleabihf csqtt-linux-armv7 \
+      generic+v7a+vfp3-d32+thumb2-neon
+    ;;
+esac
 rm -f "$ROOT/../app/src/main/assets/csqtt"
-if command -v pwsh >/dev/null; then
+if [[ "$BUILD_TARGET" != all ]]; then
+  exit 0
+elif command -v pwsh >/dev/null; then
   pwsh -NoProfile -File "$ROOT/../scripts/server_asset_provenance.ps1" -Mode Write
   pwsh -NoProfile -File "$ROOT/../scripts/server_asset_provenance.ps1" -Mode Verify
 elif command -v powershell.exe >/dev/null; then
