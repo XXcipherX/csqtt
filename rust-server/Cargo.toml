@@ -33,7 +33,7 @@ hex = "0.4"
 hkdf = "0.13.0"
 libc = "0.2"
 rand = "0.8"
-rcgen = { version = "0.13", default-features = false, features = ["aws_lc_rs", "pem"] }
+rcgen = { version = "0.14", default-features = false, features = ["aws_lc_rs", "pem"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
 aws-lc-rs = "1.18.0"
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
