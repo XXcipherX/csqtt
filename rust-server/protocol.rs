@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, bail};
 use ctr::cipher::{InnerIvInit, KeyInit, StreamCipher};
-use rand::{Rng, RngCore, SeedableRng, rngs::OsRng, rngs::StdRng};
+use rand::{Rng, RngExt, SeedableRng, TryRng, rngs::StdRng, rngs::SysRng};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     net::{IpAddr, Ipv4Addr, SocketAddr},
@@ -1141,7 +1141,9 @@ struct OutState {
 impl OutState {
     fn new(payload_type: u8) -> Self {
         let mut random = [0u8; 12];
-        OsRng.fill_bytes(&mut random);
+        SysRng
+            .try_fill_bytes(&mut random)
+            .expect("system random source unavailable");
         let wall_ms = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -2054,7 +2056,11 @@ impl ProtocolEngine {
             migrating_endpoints: HashMap::with_capacity(HOT_TABLE_RESERVE),
             routes: RouteTable::new(),
             downlink: DownlinkQueue::default(),
-            downlink_sequences: FlowSequencer::with_sender_id(OsRng.next_u64()),
+            downlink_sequences: FlowSequencer::with_sender_id(
+                SysRng
+                    .try_next_u64()
+                    .expect("system random source unavailable"),
+            ),
             ingress_reassembler: FlowReassembler::new(),
             ingress_ready: VecDeque::with_capacity(128),
             control_tx,
@@ -2062,7 +2068,7 @@ impl ProtocolEngine {
             stream_debug_active,
             global_up: shared.global_up,
             global_down: shared.global_down,
-            rng: StdRng::from_entropy(),
+            rng: StdRng::try_from_rng(&mut SysRng).expect("system random source unavailable"),
             setup_scratch: PacketBuffer::new(),
             stale_slots: Vec::with_capacity(256),
             started: Instant::now(),
@@ -3870,7 +3876,7 @@ fn wrap_legacy_into(
     let mut header = [0u8; 24];
     header[0] = 0xb0;
     header[1] = payload_type & 0x7f;
-    if payload_type == 96 && rng.gen_range(0..5u8) == 0 {
+    if payload_type == 96 && rng.random_range(0..5u8) == 0 {
         header[1] |= 0x80;
     }
     header[2..4].copy_from_slice(&seq.to_be_bytes());
@@ -3887,7 +3893,7 @@ fn wrap_legacy_into(
     let storage = output.storage_mut();
     if session.is_srtp {
         let padding_max = if payload_type == 96 { 60 } else { 24 };
-        let random_padding = rng.gen_range(0..padding_max);
+        let random_padding = rng.random_range(0..padding_max);
         let padding = random_padding + 1;
         let ciphertext_len = plain
             .len()
@@ -3920,9 +3926,9 @@ fn wrap_legacy_into(
         return Ok(total);
     }
     let random_padding = if payload_type == 111 {
-        rng.gen_range(0..24usize)
+        rng.random_range(0..24usize)
     } else {
-        rng.gen_range(0..60usize)
+        rng.random_range(0..60usize)
     };
     let padding = random_padding + 1;
     let total = 24usize
