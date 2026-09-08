@@ -30,7 +30,7 @@ concurrency:
 jobs:
   test:
     name: Unit tests, Clippy and release build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
 
     steps:
@@ -80,7 +80,7 @@ jobs:
 
   vulnerabilities:
     name: Rust vulnerability scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
 
     steps:

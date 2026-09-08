@@ -30,8 +30,20 @@ concurrency:
 
 jobs:
   build:
-    name: AMD64 image build
-    runs-on: ubuntu-latest
+    name: ${{ matrix.name }} image build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: AMD64
+            arch: amd64
+            platform: linux/amd64
+            runner: ubuntu-26.04
+          - name: ARM64
+            arch: arm64
+            platform: linux/arm64
+            runner: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
 
     steps:
@@ -46,9 +58,9 @@ jobs:
         with:
           context: .
           file: ./Dockerfile
-          platforms: linux/amd64
-          outputs: type=oci,dest=/tmp/csqtt-image.tar
+          platforms: ${{ matrix.platform }}
+          outputs: type=oci,dest=/tmp/csqtt-image-${{ matrix.arch }}.tar
           pull: true
           push: false
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=csqtt-docker-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=csqtt-docker-${{ matrix.arch }}

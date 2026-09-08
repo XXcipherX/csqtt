@@ -49,7 +49,7 @@ env:
 jobs:
   build:
     name: Android and Rust client
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
 
     steps:

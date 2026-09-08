@@ -16,8 +16,10 @@ COPY shared/ ./shared/
 WORKDIR /src/rust-server
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
   --mount=type=cache,target=/src/rust-server/target \
-  cargo build --locked --release --bin csqtt --target x86_64-unknown-linux-gnu \
-  && install -Dm0755 target/x86_64-unknown-linux-gnu/release/csqtt /out/csqtt
+  native_target="$(rustc -vV | sed -n 's/^host: //p')" \
+  && test -n "$native_target" \
+  && cargo build --locked --release --bin csqtt --target "$native_target" \
+  && install -Dm0755 "target/$native_target/release/csqtt" /out/csqtt
 
 FROM debian:trixie-slim
 

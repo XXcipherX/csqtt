@@ -32,7 +32,7 @@ env:
 jobs:
   build-linux-server:
     name: Linux server (${{ matrix.asset }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -95,7 +95,7 @@ jobs:
 
   build-android-client:
     name: Android native client (${{ matrix.abi }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -177,7 +177,7 @@ jobs:
     needs:
       - build-linux-server
       - build-android-client
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     permissions:
       contents: write

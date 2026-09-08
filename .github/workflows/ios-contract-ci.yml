@@ -29,7 +29,7 @@ env:
 jobs:
   current-ios-contract:
     name: Current iOS protocol contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
 
     steps:
