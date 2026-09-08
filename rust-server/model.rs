@@ -4,7 +4,7 @@
 use anyhow::{Context, Result, bail};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hkdf::Hkdf;
-use rand::{RngCore, rngs::OsRng};
+use rand::{TryRng, rngs::SysRng};
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -71,9 +71,10 @@ pub struct LocalProxyProfile {
 
 impl LocalProxyProfile {
     pub fn new_id() -> String {
-        use rand::RngCore;
         let mut bytes = [0u8; 6];
-        rand::rngs::OsRng.fill_bytes(&mut bytes);
+        SysRng
+            .try_fill_bytes(&mut bytes)
+            .expect("system random source unavailable");
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
     }
 }
@@ -488,7 +489,9 @@ pub fn refresh_cached_now() -> u64 {
 
 pub fn random_password() -> String {
     let mut data = [0u8; PASSWORD_LEN];
-    OsRng.fill_bytes(&mut data);
+    SysRng
+        .try_fill_bytes(&mut data)
+        .expect("system random source unavailable");
     data.iter()
         .map(|v| PASS_CHARS[*v as usize % PASS_CHARS.len()] as char)
         .collect()
@@ -496,7 +499,9 @@ pub fn random_password() -> String {
 
 pub fn random_token(size: usize) -> String {
     let mut data = vec![0u8; size];
-    OsRng.fill_bytes(&mut data);
+    SysRng
+        .try_fill_bytes(&mut data)
+        .expect("system random source unavailable");
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
 }
 
@@ -550,7 +555,9 @@ pub fn resolve_session_ip(
 
 pub fn generate_key_pair() -> (String, String) {
     let mut bytes = [0u8; 32];
-    OsRng.fill_bytes(&mut bytes);
+    SysRng
+        .try_fill_bytes(&mut bytes)
+        .expect("system random source unavailable");
     bytes[0] &= 248;
     bytes[31] = (bytes[31] & 127) | 64;
     let private = StaticSecret::from(bytes);
